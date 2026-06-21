@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-MecchaTool — ESP + Camouflage for MECCHA CHAMELEON (UE5).
+meccha_camouflage — ESP + Camouflage for MECCHA CHAMELEON (UE5).
 
 Based on ecpp/meccha-esp — external box ESP, aimbot, and direct-memory camouflage.
 
 Usage:
     pip install -r requirements.txt
-    python meccha_tool.py
+    python -m meccha_camouflage
 
 Controls
 ────────
@@ -703,7 +703,7 @@ class Menu(QWidget):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
-        self.setWindowTitle("MecchaTool")
+        self.setWindowTitle("Meccha Camouflage")
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._drag_pos = None
@@ -747,7 +747,7 @@ class Menu(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(6)
 
-        title = QLabel("MecchaTool")
+        title = QLabel("Meccha Camouflage")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #0f0;")
         layout.addWidget(title)
 

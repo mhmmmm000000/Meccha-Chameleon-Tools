@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>MecchaTool</h1>
+  <h1>Meccha Camouflage</h1>
   <p><strong>External ESP · Aimbot · Active Camouflage</strong></p>
   <p>for <em>MECCHA CHAMELEON</em> (UE5)</p>
   <br>
@@ -21,7 +21,7 @@ All features are fully external — no DLL injection, no UE4SS dependency, no DX
 
 ```powershell
 pip install -r requirements.txt
-python meccha_tool.py
+python -m meccha_camouflage
 ```
 
 **Requirements:** Python 3.11+, Windows 10/11, game running in windowed/borderless mode.
@@ -50,6 +50,16 @@ The menu organises options across three tabs:
 **Camouflage** — Enable/disable, fallback RGB presets, live status feedback.
 
 **Aimbot** — Enable toggle, FOV circle display, FOV radius, smoothing factor, aim offset, key binding recorder (supports full keyboard + mouse buttons).
+
+---
+
+## Package
+
+```
+meccha_camouflage/       # Python package
+├── __init__.py          # Main application logic
+└── __main__.py          # Entry point: python -m meccha_camouflage
+```
 
 ---
 
