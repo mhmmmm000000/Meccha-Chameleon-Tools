@@ -15,6 +15,9 @@
 
 All features are fully external — no DLL injection, no UE4SS dependency, no DXGI screen capture.
 
+<img width="1497" height="619" alt="image" src="https://github.com/user-attachments/assets/e9b6b1ce-bc39-426b-b8dc-2a67bdb5b4fe" />
+
+
 ---
 
 ## Quick Start
@@ -31,6 +34,7 @@ python -m meccha_camouflage
 | `pymem` | Game process memory read/write |
 | `PyQt5` | Transparent overlay + settings UI |
 | `pywin32` | GDI pixel sampling, window detection |
+
 
 ---
 
@@ -50,6 +54,9 @@ The menu organises options across three tabs:
 **Camouflage** — Enable/disable, fallback RGB presets, live status feedback.
 
 **Aimbot** — Enable toggle, FOV circle display, FOV radius, smoothing factor, aim offset, key binding recorder (supports full keyboard + mouse buttons).
+
+<img width="161" height="308" alt="image" src="https://github.com/user-attachments/assets/050a0169-eb49-45e4-bab5-6a21de940306" />
+
 
 ---
 
@@ -83,6 +90,12 @@ meccha_camouflage/       # Python package
 ├─ Menu ────────────► PyQt5 settings window      │
 └────────────────────────────────────────────────┘
 ```
+
+<img width="161" height="308" alt="image" src="https://github.com/user-attachments/assets/f22841e2-d417-41e9-ab37-e8f6888eba23" />
+
+
+<img width="161" height="308" alt="image" src="https://github.com/user-attachments/assets/83bc4207-a3ba-4f68-9a8b-a7d6058fec2f" />
+
 
 ### Memory Access
 
