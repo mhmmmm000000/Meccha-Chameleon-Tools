@@ -7,7 +7,7 @@ from typing import Tuple, Optional
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QCheckBox, QComboBox, QLabel,
     QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QColorDialog,
-    QSpinBox, QDoubleSpinBox, QSlider,
+    QSpinBox, QDoubleSpinBox, QSlider, QListWidget, QStackedWidget,
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont, QBrush, QPolygonF
@@ -297,7 +297,7 @@ class Menu(QWidget):
         self._drag_pos = None
         self._key_recorder = KeyRecorder(self._on_key_recorded)
         self._build_ui()
-        self.setFixedSize(320, 780)
+        self.setFixedSize(500, 560)
 
     def _on_key_recorded(self, name):
         self.config.aimbot_key = name
@@ -309,176 +309,227 @@ class Menu(QWidget):
         container = QFrame(self)
         container.setObjectName("menuFrame")
         container.setStyleSheet(self.STYLE)
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(5)
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(12, 8, 12, 8)
+        outer.setSpacing(6)
 
-        title = QLabel("MECCHA TOOLS")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #5a8ec5; letter-spacing: 2px")
-        layout.addWidget(title)
+        # Title
+        title = QLabel("MECCA CHAMELION TOOLS")
+        title.setObjectName("titleLbl")
+        title.setAlignment(Qt.AlignCenter)
+        outer.addWidget(title)
 
-        # --- ESP toggles ---
-        self.cb_enabled = self._chk("ESP Enabled", "enabled")
-        layout.addWidget(self.cb_enabled)
+        # Tab list + stacked pages
+        body = QHBoxLayout()
+        body.setSpacing(8)
 
-        esp_type = QHBoxLayout()
-        self.cb_dot = self._chk("Dot ESP", "dot_esp")
-        self.cb_box = self._chk("2D Box", "box_esp")
-        self.cb_skeleton = self._chk("Skeleton", "skeleton_esp")
-        esp_type.addWidget(self.cb_dot)
-        esp_type.addWidget(self.cb_box)
-        esp_type.addWidget(self.cb_skeleton)
-        layout.addLayout(esp_type)
+        self.tab_list = QListWidget()
+        self.tab_list.setFixedWidth(90)
+        self.tab_list.setFocusPolicy(Qt.NoFocus)
+        self.tab_list.setStyleSheet("""
+            QListWidget {
+                background: #1a1a28; border: 1px solid #2a2a3e;
+                border-radius: 6px; padding: 4px; outline: none;
+            }
+            QListWidget::item {
+                color: #888; padding: 8px 6px; border-radius: 4px;
+                font-size: 11px; font-weight: bold;
+            }
+            QListWidget::item:selected {
+                background: #2a3a5a; color: #8ab4f8;
+            }
+            QListWidget::item:hover:!selected {
+                background: #22223a; color: #aaa;
+            }
+        """)
+        self.tab_list.addItems(["ESP","HEALTH","RADAR","AIMBOT","COLORS"])
+        self.tab_list.currentRowChanged.connect(self._switch_tab)
 
-        self.cb_local = self._chk("Show Local Player", "show_local")
-        self.cb_names = self._chk("Show Names", "show_names")
-        self.cb_dist = self._chk("Show Distance", "show_distance")
-        self.cb_snap = self._chk("Snap Lines", "snap_lines")
-        self.cb_team = self._chk("Team Filter (Hunters)", "team_filter")
-        self.cb_scale = self._chk("Distance Scaling", "distance_scaling")
-        layout.addWidget(self.cb_local)
-        layout.addWidget(self.cb_names)
-        layout.addWidget(self.cb_dist)
-        layout.addWidget(self.cb_snap)
-        layout.addWidget(self.cb_team)
-        layout.addWidget(self.cb_scale)
+        self.stack = QStackedWidget()
+        self.stack.setStyleSheet("background: transparent;")
 
-        # Dot radius
-        dot_row = QHBoxLayout()
-        dot_row.addWidget(QLabel("Dot Radius:"))
+        self._pages = {}
+        for tab_name in ["ESP","HEALTH","RADAR","AIMBOT","COLORS"]:
+            page = QWidget()
+            page.setStyleSheet("background: transparent;")
+            self._pages[tab_name] = page
+            self.stack.addWidget(page)
+
+        body.addWidget(self.tab_list)
+        body.addWidget(self.stack, 1)
+        outer.addLayout(body, 1)
+
+        # Bottom bar
+        bar = QHBoxLayout()
+        bar.setSpacing(8)
+        self.btn_save = QPushButton("Save Config")
+        self.btn_save.clicked.connect(self._save_config)
+        hint = QLabel("Ins/F1 toggle | Drag to move")
+        hint.setStyleSheet("color: #555; font-size: 9px;")
+        bar.addWidget(self.btn_save)
+        bar.addStretch()
+        bar.addWidget(hint)
+        outer.addLayout(bar)
+
+        outer2 = QVBoxLayout(self)
+        outer2.addWidget(container)
+        outer2.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(outer2)
+
+        # Build each tab page
+        self._build_esp_tab()
+        self._build_health_tab()
+        self._build_radar_tab()
+        self._build_aimbot_tab()
+        self._build_colors_tab()
+
+    def _switch_tab(self, idx):
+        names = ["ESP","HEALTH","RADAR","AIMBOT","COLORS"]
+        if 0 <= idx < len(names):
+            self.stack.setCurrentIndex(idx)
+
+    def _build_esp_tab(self):
+        p = self._pages["ESP"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(4)
+        self.cb_enabled = self._chk("ESP Enabled","enabled")
+        lo.addWidget(self.cb_enabled)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.cb_dot = self._chk("Dot","dot_esp")
+        self.cb_box = self._chk("2D Box","box_esp")
+        self.cb_skeleton = self._chk("Skeleton","skeleton_esp")
+        row.addWidget(self.cb_dot)
+        row.addWidget(self.cb_box)
+        row.addWidget(self.cb_skeleton)
+        lo.addLayout(row)
+        for cfg, label in [("show_local","Show Local Player"), ("show_names","Show Names"),
+                           ("show_distance","Show Distance"), ("snap_lines","Snap Lines"),
+                           ("team_filter","Team Filter"), ("distance_scaling","Dist. Scaling")]:
+            cb = self._chk(label, cfg)
+            lo.addWidget(cb)
+        dr = QHBoxLayout()
+        dr.addWidget(QLabel("Dot Radius:"))
         self.spn_dot = QSpinBox()
         self.spn_dot.setRange(2, 32)
         self.spn_dot.setValue(self.config.dot_radius)
         self.spn_dot.valueChanged.connect(lambda v: setattr(self.config, "dot_radius", v))
-        dot_row.addWidget(self.spn_dot)
-        layout.addLayout(dot_row)
+        dr.addWidget(self.spn_dot)
+        lo.addLayout(dr)
+        lo.addStretch()
 
-        # --- Health bars ---
-        hb_title = QLabel("HEALTH / SHIELD")
-        hb_title.setObjectName("sectionHeader")
-        layout.addWidget(hb_title)
-
-        self.cb_hp = self._chk("Health Bar", "health_bar")
-        self.cb_shield = self._chk("Shield Bar", "shield_bar")
-        layout.addWidget(self.cb_hp)
-        layout.addWidget(self.cb_shield)
-
-        height_row = QHBoxLayout()
-        height_row.addWidget(QLabel("Model Height:"))
+    def _build_health_tab(self):
+        p = self._pages["HEALTH"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(4)
+        self.cb_hp = self._chk("Health Bar","health_bar")
+        self.cb_shield = self._chk("Shield Bar","shield_bar")
+        lo.addWidget(self.cb_hp)
+        lo.addWidget(self.cb_shield)
+        hr = QHBoxLayout()
+        hr.addWidget(QLabel("Model Height:"))
         self.spn_height = QSpinBox()
         self.spn_height.setRange(50, 250)
         self.spn_height.setValue(int(self.config.box_height_world))
         self.spn_height.valueChanged.connect(lambda v: setattr(self.config, "box_height_world", float(v)))
-        height_row.addWidget(self.spn_height)
-        layout.addLayout(height_row)
-
-        off_row = QHBoxLayout()
-        off_row.addWidget(QLabel("Y Offset:"))
+        hr.addWidget(self.spn_height)
+        lo.addLayout(hr)
+        yr = QHBoxLayout()
+        yr.addWidget(QLabel("Y Offset:"))
         self.spn_yoff = QSpinBox()
         self.spn_yoff.setRange(-50, 50)
         self.spn_yoff.setValue(self.config.box_y_offset)
         self.spn_yoff.valueChanged.connect(lambda v: setattr(self.config, "box_y_offset", v))
-        off_row.addWidget(self.spn_yoff)
-        layout.addLayout(off_row)
+        yr.addWidget(self.spn_yoff)
+        lo.addLayout(yr)
+        lo.addStretch()
 
-        # --- Radar ---
-        radar_title = QLabel("RADAR")
-        radar_title.setObjectName("sectionHeader")
-        layout.addWidget(radar_title)
-        self.cb_radar = self._chk("Radar Enabled", "radar_enabled")
-        layout.addWidget(self.cb_radar)
-        radar_size_row = QHBoxLayout()
-        radar_size_row.addWidget(QLabel("Radar Size:"))
+    def _build_radar_tab(self):
+        p = self._pages["RADAR"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(4)
+        self.cb_radar = self._chk("Radar Enabled","radar_enabled")
+        lo.addWidget(self.cb_radar)
+        sr = QHBoxLayout()
+        sr.addWidget(QLabel("Radar Size:"))
         self.spn_radar_size = QSpinBox()
         self.spn_radar_size.setRange(80, 400)
         self.spn_radar_size.setValue(self.config.radar_size)
         self.spn_radar_size.valueChanged.connect(lambda v: setattr(self.config, "radar_size", v))
-        radar_size_row.addWidget(self.spn_radar_size)
-        layout.addLayout(radar_size_row)
-        radar_range_row = QHBoxLayout()
-        radar_range_row.addWidget(QLabel("Radar Range:"))
+        sr.addWidget(self.spn_radar_size)
+        lo.addLayout(sr)
+        rr = QHBoxLayout()
+        rr.addWidget(QLabel("Radar Range:"))
         self.spn_radar_range = QSpinBox()
         self.spn_radar_range.setRange(1000, 50000)
         self.spn_radar_range.setSingleStep(500)
         self.spn_radar_range.setValue(int(self.config.radar_range))
         self.spn_radar_range.valueChanged.connect(lambda v: setattr(self.config, "radar_range", float(v)))
-        radar_range_row.addWidget(self.spn_radar_range)
-        layout.addLayout(radar_range_row)
+        rr.addWidget(self.spn_radar_range)
+        lo.addLayout(rr)
+        lo.addStretch()
 
-        # --- Aimbot ---
-        aim_title = QLabel("AIMBOT")
-        aim_title.setObjectName("sectionHeader")
-        layout.addWidget(aim_title)
-        self.cb_aimbot = self._chk("Aimbot Enabled", "aimbot_enabled")
-        self.cb_aim_fov = self._chk("Show FOV Circle", "aimbot_show_fov")
-        layout.addWidget(self.cb_aimbot)
-        layout.addWidget(self.cb_aim_fov)
-
-        aim_key_row = QHBoxLayout()
-        self.lbl_aim_key = QLabel(f"Aim Key: {self.config.aimbot_key}")
+    def _build_aimbot_tab(self):
+        p = self._pages["AIMBOT"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(4)
+        self.cb_aimbot = self._chk("Aimbot Enabled","aimbot_enabled")
+        self.cb_aim_fov = self._chk("Show FOV Circle","aimbot_show_fov")
+        lo.addWidget(self.cb_aimbot)
+        lo.addWidget(self.cb_aim_fov)
+        kr = QHBoxLayout()
+        self.lbl_aim_key = QLabel("Aim Key: " + self.config.aimbot_key)
         self.btn_record_key = QPushButton("Record Key")
         self.btn_record_key.clicked.connect(self._start_aim_key_record)
-        aim_key_row.addWidget(self.lbl_aim_key)
-        aim_key_row.addWidget(self.btn_record_key)
-        layout.addLayout(aim_key_row)
-
-        fov_row = QHBoxLayout()
-        fov_row.addWidget(QLabel("FOV Radius:"))
+        kr.addWidget(self.lbl_aim_key)
+        kr.addWidget(self.btn_record_key)
+        lo.addLayout(kr)
+        fr = QHBoxLayout()
+        fr.addWidget(QLabel("FOV Radius:"))
         self.spn_aim_fov = QSpinBox()
         self.spn_aim_fov.setRange(10, 600)
         self.spn_aim_fov.setValue(self.config.aimbot_fov)
         self.spn_aim_fov.valueChanged.connect(lambda v: setattr(self.config, "aimbot_fov", v))
-        fov_row.addWidget(self.spn_aim_fov)
-        layout.addLayout(fov_row)
-
-        smooth_row = QHBoxLayout()
-        smooth_row.addWidget(QLabel("Smooth:"))
+        fr.addWidget(self.spn_aim_fov)
+        lo.addLayout(fr)
+        sr = QHBoxLayout()
+        sr.addWidget(QLabel("Smooth:"))
         self.spn_aim_smooth = QDoubleSpinBox()
         self.spn_aim_smooth.setRange(0.01, 1.0)
         self.spn_aim_smooth.setSingleStep(0.05)
         self.spn_aim_smooth.setValue(self.config.aimbot_smooth)
         self.spn_aim_smooth.valueChanged.connect(lambda v: setattr(self.config, "aimbot_smooth", v))
-        smooth_row.addWidget(self.spn_aim_smooth)
-        layout.addLayout(smooth_row)
-
-        aim_off_row = QHBoxLayout()
-        aim_off_row.addWidget(QLabel("Target Offset:"))
+        sr.addWidget(self.spn_aim_smooth)
+        lo.addLayout(sr)
+        ar = QHBoxLayout()
+        ar.addWidget(QLabel("Target Offset:"))
         self.spn_aim_off = QSpinBox()
         self.spn_aim_off.setRange(-200, 200)
         self.spn_aim_off.setValue(int(self.config.aimbot_target_offset))
         self.spn_aim_off.valueChanged.connect(lambda v: setattr(self.config, "aimbot_target_offset", float(v)))
-        aim_off_row.addWidget(self.spn_aim_off)
-        layout.addLayout(aim_off_row)
+        ar.addWidget(self.spn_aim_off)
+        lo.addLayout(ar)
+        lo.addStretch()
 
-        # --- Colors ---
-        color_title = QLabel("COLORS")
-        color_title.setObjectName("sectionHeader")
-        layout.addWidget(color_title)
-        color_row = QHBoxLayout()
-        self.btn_enemy_color = QPushButton("Enemy")
+    def _build_colors_tab(self):
+        p = self._pages["COLORS"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setSpacing(6)
+        self.btn_enemy_color = QPushButton("Enemy Color")
         self.btn_enemy_color.clicked.connect(lambda: self._pick_color("enemy_color"))
-        self.btn_local_color = QPushButton("Local")
+        self.btn_local_color = QPushButton("Local Color")
         self.btn_local_color.clicked.connect(lambda: self._pick_color("local_color"))
-        self.btn_skeleton_color = QPushButton("Bone")
+        self.btn_skeleton_color = QPushButton("Skeleton Color")
         self.btn_skeleton_color.clicked.connect(lambda: self._pick_color("skeleton_color"))
-        color_row.addWidget(self.btn_enemy_color)
-        color_row.addWidget(self.btn_local_color)
-        color_row.addWidget(self.btn_skeleton_color)
-        layout.addLayout(color_row)
-
-        # --- Save ---
-        self.btn_save = QPushButton("Save Config")
-        self.btn_save.clicked.connect(self._save_config)
-        layout.addWidget(self.btn_save)
-
-        hint = QLabel("Insert / F1 to toggle  |  Drag to move")
-        hint.setStyleSheet("color: #555; font-size: 9px;")
-        layout.addWidget(hint)
-
-        outer = QVBoxLayout(self)
-        outer.addWidget(container)
-        outer.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(outer)
+        lo.addWidget(self.btn_enemy_color)
+        lo.addWidget(self.btn_local_color)
+        lo.addWidget(self.btn_skeleton_color)
+        lo.addStretch()
 
     def _chk(self, text, attr):
         cb = QCheckBox(text)
@@ -494,16 +545,16 @@ class Menu(QWidget):
 
     def _start_aim_key_record(self):
         self.btn_record_key.setEnabled(False)
-        self.btn_record_key.setText("Press key...")
+        self.btn_record_key.setText('Press key...')
         self._key_recorder.start()
 
     def _save_config(self):
         if save_config(self.config):
-            self.btn_save.setText("Config Saved!")
-            QTimer.singleShot(1500, lambda: self.btn_save.setText("Save Config"))
+            self.btn_save.setText('Config Saved!')
+            QTimer.singleShot(1500, lambda: self.btn_save.setText('Save Config'))
         else:
-            self.btn_save.setText("Save Failed!")
-            QTimer.singleShot(1500, lambda: self.btn_save.setText("Save Config"))
+            self.btn_save.setText('Save Failed!')
+            QTimer.singleShot(1500, lambda: self.btn_save.setText('Save Config'))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
