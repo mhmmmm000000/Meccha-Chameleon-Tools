@@ -156,9 +156,10 @@ def draw_health_bar(painter, x, y, w, h, health_pct, shield_pct, spacing=2):
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(30, 30, 30, 180))
         painter.drawRect(int(x), int(hy), int(bar_w), bar_h)
-        r = int(255 * (1 - health_pct / 100.0))
-        g = int(255 * (health_pct / 100.0))
-        painter.setBrush(QColor(min(255, r), min(255, g), 0, 220))
+        pct_clamped = max(0.0, min(100.0, float(health_pct or 0)))
+        r = int(255 * (1 - pct_clamped / 100.0))
+        g = int(255 * (pct_clamped / 100.0))
+        painter.setBrush(QColor(r, g, 0, 220))
         painter.drawRect(int(x), int(hy), int(hfill), bar_h)
 
 
