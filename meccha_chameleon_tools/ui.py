@@ -258,39 +258,46 @@ def draw_radar(painter, cam, local_pos, players, radar_cx, radar_cy, radar_size,
 class Menu(QWidget):
     STYLE = """
         QFrame {
-            background-color: rgba(20, 20, 20, 220);
-            border: 1px solid #444;
-            border-radius: 8px;
+            background-color: rgba(14, 14, 20, 240);
+            border: 1px solid #2a2a3e;
+            border-radius: 10px;
         }
-        QLabel { color: #eee; font-size: 12px; }
-        QCheckBox { color: #eee; font-size: 12px; spacing: 8px; }
-        QCheckBox::indicator { width: 16px; height: 16px; }
+        QLabel { color: #bbb; font-size: 11px; }
+        QCheckBox { color: #ccc; font-size: 11px; spacing: 8px; padding: 1px 0; }
+        QCheckBox::indicator { width: 15px; height: 15px; border-radius: 3px; border: 1px solid #444; background: #1a1a28; }
+        QCheckBox::indicator:checked {
+            background: #3a6ea5; border-color: #5a8ec5;
+        }
         QComboBox {
             background-color: #333; color: #eee;
             border: 1px solid #555; padding: 4px;
         }
         QPushButton {
-            background-color: #333; color: #eee;
-            border: 1px solid #555; padding: 6px; border-radius: 4px;
+            background-color: #22223a; color: #ccc;
+            border: 1px solid #33334a; padding: 5px 10px; border-radius: 5px;
+            font-size: 11px;
         }
-        QPushButton:hover { background-color: #444; }
+        QPushButton:hover { background-color: #2e2e4a; border-color: #4a4a6a; }
+        QPushButton:pressed { background-color: #3a3a5a; }
         QSpinBox, QDoubleSpinBox {
-            background-color: #333; color: #eee;
-            border: 1px solid #555; padding: 2px;
+            background-color: #1a1a28; color: #ccc;
+            border: 1px solid #33334a; padding: 1px 3px; border-radius: 3px;
+            font-size: 11px; min-height: 20px;
         }
+        QSpinBox:focus, QDoubleSpinBox:focus { border-color: #5a8ec5; }
     """
 
     def __init__(self, config: Config, esp: MecchaESP):
         super().__init__()
         self.config = config
         self.esp = esp
-        self.setWindowTitle("MECCHA ESP Menu")
+        self.setWindowTitle("Meccha Chameleon Tools")
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._drag_pos = None
         self._key_recorder = KeyRecorder(self._on_key_recorded)
         self._build_ui()
-        self.setFixedSize(280, 740)
+        self.setFixedSize(320, 780)
 
     def _on_key_recorded(self, name):
         self.config.aimbot_key = name
@@ -300,13 +307,14 @@ class Menu(QWidget):
 
     def _build_ui(self):
         container = QFrame(self)
+        container.setObjectName("menuFrame")
         container.setStyleSheet(self.STYLE)
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(6)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(5)
 
-        title = QLabel("MECCHA ESP v2")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0f0;")
+        title = QLabel("MECCHA TOOLS")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #5a8ec5; letter-spacing: 2px")
         layout.addWidget(title)
 
         # --- ESP toggles ---
@@ -347,7 +355,7 @@ class Menu(QWidget):
 
         # --- Health bars ---
         hb_title = QLabel("HEALTH / SHIELD")
-        hb_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #f80;")
+        hb_title.setObjectName("sectionHeader")
         layout.addWidget(hb_title)
 
         self.cb_hp = self._chk("Health Bar", "health_bar")
@@ -375,7 +383,7 @@ class Menu(QWidget):
 
         # --- Radar ---
         radar_title = QLabel("RADAR")
-        radar_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #66f;")
+        radar_title.setObjectName("sectionHeader")
         layout.addWidget(radar_title)
         self.cb_radar = self._chk("Radar Enabled", "radar_enabled")
         layout.addWidget(self.cb_radar)
@@ -399,7 +407,7 @@ class Menu(QWidget):
 
         # --- Aimbot ---
         aim_title = QLabel("AIMBOT")
-        aim_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #f0f;")
+        aim_title.setObjectName("sectionHeader")
         layout.addWidget(aim_title)
         self.cb_aimbot = self._chk("Aimbot Enabled", "aimbot_enabled")
         self.cb_aim_fov = self._chk("Show FOV Circle", "aimbot_show_fov")
@@ -444,7 +452,7 @@ class Menu(QWidget):
 
         # --- Colors ---
         color_title = QLabel("COLORS")
-        color_title.setStyleSheet("font-size: 13px; font-weight: bold; color: #aaa;")
+        color_title.setObjectName("sectionHeader")
         layout.addWidget(color_title)
         color_row = QHBoxLayout()
         self.btn_enemy_color = QPushButton("Enemy")
@@ -463,8 +471,8 @@ class Menu(QWidget):
         self.btn_save.clicked.connect(self._save_config)
         layout.addWidget(self.btn_save)
 
-        hint = QLabel("Insert / F1 to toggle menu")
-        hint.setStyleSheet("color: #888; font-size: 10px;")
+        hint = QLabel("Insert / F1 to toggle  |  Drag to move")
+        hint.setStyleSheet("color: #555; font-size: 9px;")
         layout.addWidget(hint)
 
         outer = QVBoxLayout(self)
@@ -527,7 +535,7 @@ class Overlay(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        self.setWindowTitle("MECCHA ESP")
+        self.setWindowTitle("Meccha Chameleon Tools - Overlay")
         self._key_states = {}
 
         self.timer = QTimer(self)
