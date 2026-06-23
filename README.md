@@ -86,6 +86,7 @@ make sure the game start with next run
 |-----|--------|
 | Insert / F1 | Toggle settings menu |
 | F10 | Camouflage (DEV / optional -- disabled by default) |
+| Close button | Bottom bar of menu -- quits the application entirely |
 
 ### Settings Tabs
 
@@ -129,7 +130,7 @@ UObjectArray -> find_class, iter_objects
 OffsetResolver -> dynamic property walking
 GameReader -> world, camera, players
 Overlay -> QPainter rendering loop @ 60 fps
-Menu -> PyQt5 settings window (5-tab sidebar)
+Menu -> PyQt5 settings window (6-tab sidebar: ESP, HEALTH, RADAR, AIMBOT, COLORS, CAMOUFLAGE)
 ```
 
 ### Memory Access
@@ -162,6 +163,12 @@ The FNameResolver auto-detects UE4, UE5, and custom header-layout variants. The 
 ---
 
 ## Changelog
+
+### v1.4.1 - CI auto-build + Close button + __main__ fix
+
+- **CI/CD** -- GitHub Actions auto-builds the single-file EXE on every push to master and attaches it to releases.
+- **Close button** -- added to the menu bottom bar to quit the application at any time.
+- **__main__.py fix** -- corrected import path (double-__init__) to prevent EXE crash when game is not running.
 
 ### v1.4.0 - Smarter auto-install (prompt only on first launch) + CI auto-build
 
