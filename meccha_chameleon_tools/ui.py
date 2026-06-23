@@ -2,6 +2,7 @@
 """Qt5 overlay and menu widgets for MECCHA CHAMELEON ESP."""
 import math
 import ctypes
+import sys
 from typing import Tuple, Optional
 
 from PyQt5.QtWidgets import (
@@ -304,6 +305,9 @@ class Menu(QWidget):
         self._build_ui()
         self.setFixedSize(500, 560)
 
+    def _close_app(self):
+        QApplication.quit()
+
     def _on_key_recorded(self, name):
         self.config.aimbot_key = name
         self.lbl_aim_key.setText(f"Aim Key: {name}")
@@ -369,9 +373,14 @@ class Menu(QWidget):
         bar.setSpacing(8)
         self.btn_save = QPushButton("Save Config")
         self.btn_save.clicked.connect(self._save_config)
+        self.btn_close = QPushButton("Close")
+        self.btn_close.clicked.connect(self._close_app)
+        self.btn_close.setStyleSheet("QPushButton { background-color: #3a1a1a; border-color: #5a2a2a; } QPushButton:hover { background-color: #5a2a2a; }")
+
         hint = QLabel("Ins/F1 toggle | Drag to move")
         hint.setStyleSheet("color: #555; font-size: 9px;")
         bar.addWidget(self.btn_save)
+        bar.addWidget(self.btn_close)
         bar.addStretch()
         bar.addWidget(hint)
         outer.addLayout(bar)
