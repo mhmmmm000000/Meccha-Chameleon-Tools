@@ -3,6 +3,7 @@
 import math
 import ctypes
 import sys
+import time
 from typing import Tuple, Optional
 
 from PyQt5.QtWidgets import (
@@ -648,6 +649,9 @@ class Overlay(QWidget):
         self._camo_feedback = ""       # brief status text ("Sampling...", "Camo ON", etc.)
         self._camo_feedback_count = 0
         self._original_pawn_color = None  # (r,g,b) to restore when camo toggled off
+        self._paint_indicator_active = False  # True when C++ mod paint pipeline is running
+        self._paint_indicator_start = 0.0     # time.time() when paint started
+        self._paint_indicator_est_sec = 60.0  # estimated duration
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_overlay)
@@ -698,12 +702,15 @@ class Overlay(QWidget):
             self._key_states[name] = bool(state)
 
         # Camouflage hotkey (F10)
-        if self.config.camouflage_enabled:
-            VK_F10 = 0x79
-            camo_held = bool(ctypes.windll.user32.GetAsyncKeyState(VK_F10) & 0x8000)
-            if camo_held and not self._camo_key_held:
+        VK_F10 = 0x79
+        f10_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_F10) & 0x8000)
+        if f10_down and not self._camo_key_held:
+            if self.config.camouflage_enabled:
                 self._toggle_camouflage()
-            self._camo_key_held = camo_held
+            # Always show paint indicator when F10 pressed (used by C++ mod too)
+            self._paint_indicator_active = True
+            self._paint_indicator_start = time.time()
+        self._camo_key_held = f10_down
 
     def _toggle_camouflage(self):
         """Toggle camouflage on/off. When turning on, sample screen and write to 3D model."""
@@ -998,6 +1005,30 @@ class Overlay(QWidget):
             # Steady state: camo is OFF
             painter.setPen(QPen(QColor(80, 80, 80)))
             painter.drawText(10, 40, "CAMO OFF (F10)")
+
+        # Paint pipeline progress indicator (C++ mod activity)
+        if self._paint_indicator_active:
+            elapsed = time.time() - self._paint_indicator_start
+            progress = min(1.0, elapsed / self._paint_indicator_est_sec)
+            if progress >= 1.0:
+                self._paint_indicator_active = False
+            else:
+                bar_x, bar_y = 10, 60
+                bar_w, bar_h = 200, 16
+                # Background
+                painter.setPen(QPen(QColor(60, 60, 60), 1))
+                painter.setBrush(QBrush(QColor(30, 30, 30)))
+                painter.drawRect(bar_x, bar_y, bar_w, bar_h)
+                # Fill
+                fill_w = int(bar_w * progress)
+                if fill_w > 0:
+                    painter.setBrush(QBrush(QColor(0, 160, 230)))
+                    painter.setPen(Qt.NoPen)
+                    painter.drawRect(bar_x + 1, bar_y + 1, max(1, fill_w - 2), bar_h - 2)
+                # Text
+                painter.setPen(QPen(QColor(255, 255, 255)))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawText(bar_x + 5, bar_y + 13, f"PAINTING... {int(progress * 100)}%")
 
         # Aimbot
         if self.config.aimbot_enabled:

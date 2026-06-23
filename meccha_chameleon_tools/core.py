@@ -460,6 +460,8 @@ class MecchaESP:
         self._health_offsets = None
         self._shield_offsets = None
         self._bone_cache = {}
+        self._camo_cache = {}
+        self._tex_cache = {}      # texture_addr -> {data_ptr, size}
 
     def _scan_guobject_array(self):
         scanner = PatternScanner(self.pm, self.MODULE_NAME)
@@ -923,19 +925,8 @@ class MecchaESP:
     # RuntimePaintableComponent helpers — texture-based paint
     # -----------------------------------------------------------------------
     def _find_runtime_paint_component(self, pawn):
-        """Find RuntimePaintableComponent via GObjects scan (like the mod source).
-        The mod uses FindObjects + GetOwner, NOT walking owned components."""
-        # First search ALL objects globally for RuntimePaintableComponent
-        for obj in self.objects.find_objects_by_class_name("RuntimePaintableComponent"):
-            outer = rp(self.pm, obj + OFFSETS["UObjectBase::OuterPrivate"])
-            if outer and outer == pawn:
-                return obj
-            # Also check if this component has the pawn as owner via Outer chain
-            if outer:
-                outer_cls = self.objects.class_name(outer)
-                if outer_cls and "Character" in outer_cls:
-                    return obj
-        # Fallback: walk owned components (less reliable)
+        """Walk owned components for RuntimePaintableComponent (fast, no global GObjects scan).
+        The global GObjects scan was removed because it freezes for ~60 seconds."""
         for comp in self.walk_owned_components(pawn):
             cname = self.objects.class_name(comp)
             if cname and "RuntimePaintableComponent" in cname:
@@ -968,50 +959,67 @@ class MecchaESP:
             prop = rp(self.pm, prop + self.offsets["FField::Next"])
         return 0
 
-    def _write_texture_flat(self, texture, r, g, b):
+    def _write_texture_flat(self, texture, r_byte, g_byte, b_byte, a_byte=255):
         """Write a uniform color to a UTexture2D mip 0 bulk data.
-        Values 0.0-1.0, writes BGRA (common UE5 texture byte order)."""
-        # Convert float [0,1] to byte [0,255] — BGRA order for UE5 paint textures
-        b_val = max(0, min(255, int(b * 255.0)))
-        g_val = max(0, min(255, int(g * 255.0)))
-        r_val = max(0, min(255, int(r * 255.0)))
-        for pd_off in range(0x1C0, 0x260, 8):
+        Uses class property walk for PlatformData, then smart narrow-range search
+        for Mips/BulkData/Data. Caches found addresses for instant subsequent calls.
+        Values 0-255, writes BGRA (common UE5 texture byte order)."""
+        # Check cache first (instant after first hit)
+        if texture in self._tex_cache:
+            cached = self._tex_cache[texture]
             try:
-                pd = rp(self.pm, texture + pd_off)
-                if not pd or pd < 0x100000:
+                sz = cached["size"]
+                pixels = bytearray([b_byte, g_byte, r_byte, a_byte]) * (sz // 4)
+                self.pm.write_bytes(cached["data_ptr"], bytes(pixels), sz)
+                return True
+            except Exception:
+                del self._tex_cache[texture]
+
+        # 1. Find PlatformData offset by walking texture class properties
+        cls = self.objects.obj_class(texture)
+        if not cls:
+            return False
+        name, pd_off = self.resolver.search_properties(cls, ["PlatformData"])
+        if not name or pd_off < 0:
+            return False
+        pd = rp(self.pm, texture + pd_off)
+        if not pd or pd < 0x100000:
+            return False
+
+        # 2. Find Mips TArray in FTexturePlatformData (smart narrow range)
+        for mips_off in range(0x08, 0x48, 4):
+            try:
+                mips_data, mips_count = read_tarray_ptr(self.pm, pd + mips_off)
+                if not mips_data or mips_count < 1 or mips_count > 16 or mips_data < 0x100000:
                     continue
-                for mips_off in (0x10, 0x18, 0x20, 0x28, 0x30, 0x38):
-                    mips_data, mips_count = read_tarray_ptr(self.pm, pd + mips_off)
-                    if not mips_data or mips_count != 1:
-                        continue
-                    mip = rp(self.pm, mips_data)
-                    if not mip or mip < 0x100000:
-                        continue
-                    for data_off in (0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30,
-                                     0x38, 0x40, 0x48, 0x50, 0x58):
-                        data_ptr = rp(self.pm, mip + data_off)
-                        if not data_ptr or data_ptr < 0x100000:
+                mip = rp(self.pm, mips_data)
+                if not mip or mip < 0x100000:
+                    continue
+                # 3. Find BulkData within FTexture2DMipMap
+                for bulk_off in (0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38):
+                    try:
+                        bulk = rp(self.pm, mip + bulk_off)
+                        if not bulk or bulk < 0x100000:
                             continue
-                        test = self.pm.read_bytes(data_ptr, 4)
-                        if len(test) < 4:
-                            continue
-                        for size_off in (0x08, 0x10, 0x18, 0x20):
-                            try:
-                                raw = self.pm.read_bytes(mip + size_off, 8)
-                                if len(raw) < 8:
-                                    continue
-                                sz = struct.unpack("<Q", raw)[0]
-                                if 256 <= sz <= 33554432:
-                                    pixel_data = bytearray(sz)
-                                    for i in range(0, sz, 4):
-                                        pixel_data[i] = b_val
-                                        pixel_data[i+1] = g_val
-                                        pixel_data[i+2] = r_val
-                                        pixel_data[i+3] = 255
-                                    self.pm.write_bytes(data_ptr, bytes(pixel_data), sz)
-                                    return True
-                            except Exception:
+                        # 4. Find Data pointer within FByteBulkData
+                        for data_off in range(0x00, 0x30, 8):
+                            dptr = rp(self.pm, bulk + data_off)
+                            if not dptr or dptr < 0x100000:
                                 continue
+                            # 5. Find Size within FByteBulkData
+                            for size_off in range(0x08, 0x38, 8):
+                                try:
+                                    raw = self.pm.read_bytes(bulk + size_off, 8)
+                                    sz = struct.unpack("<Q", raw)[0]
+                                    if 256 <= sz <= 67108864:
+                                        pixels = bytearray([b_byte, g_byte, r_byte, a_byte]) * (sz // 4)
+                                        self.pm.write_bytes(dptr, bytes(pixels), sz)
+                                        self._tex_cache[texture] = {"data_ptr": dptr, "size": sz}
+                                        return True
+                                except Exception:
+                                    continue
+                    except Exception:
+                        continue
             except Exception:
                 continue
         return False
@@ -1037,7 +1045,11 @@ class MecchaESP:
         return 0
 
     def read_camouflage_color(self, actor):
-        """Read the current color from the pawn's material."""
+        """Read the current color from the pawn's material. Uses cache for speed."""
+        if actor in self._camo_cache:
+            cached = self._camo_cache[actor]
+            if cached["orig_color"] is not None:
+                return cached["orig_color"]
         try:
             mesh = self.get_skeletal_mesh(actor)
             if not mesh:
@@ -1045,7 +1057,12 @@ class MecchaESP:
             for mat in self._get_mesh_materials(mesh):
                 color_addr, orig = self._find_color_parameter(mat)
                 if color_addr:
-                    return (orig[0]*255, orig[1]*255, orig[2]*255)
+                    result = (int(orig[0]*255), int(orig[1]*255), int(orig[2]*255))
+                    if actor not in self._camo_cache:
+                        self._camo_cache[actor] = {"color_addr": color_addr, "orig_color": result}
+                    else:
+                        self._camo_cache[actor]["orig_color"] = result
+                    return result
             color_names = ["CharacterColor", "BodyColor", "CamouflageColor", "CurrentColor",
                            "SkinColor", "MeshColor", "PlayerColor", "TeamColor", "Color"]
             cls = self.objects.obj_class(actor)
@@ -1053,38 +1070,53 @@ class MecchaESP:
                 name, off = self.resolver.search_properties(cls, color_names)
                 if name and off >= 0:
                     orig = struct.unpack("ffff", self.pm.read_bytes(actor + off, 16))
-                    return (orig[0]*255, orig[1]*255, orig[2]*255)
+                    result = (int(orig[0]*255), int(orig[1]*255), int(orig[2]*255))
+                    self._camo_cache[actor] = {"color_addr": actor + off, "orig_color": result}
+                    return result
             return None
         except Exception:
             return None
 
     def set_camouflage_color(self, actor, r, g, b):
         """Set camouflage color by writing directly to the paint texture.
-        Falls back to material/property methods if texture not found."""
+        Main approach: find RuntimePaintableComponent → find paint texture → write mip0 data.
+        Falls back to mesh material params if texture not found.
+        Caches everything for instant subsequent toggles."""
+        r_byte = max(0, min(255, int(b)))      # BGRA order for UE5
+        g_byte = max(0, min(255, int(g)))
+        b_byte = max(0, min(255, int(r)))
         r_lin = max(0.0, min(1.0, r / 255.0))
         g_lin = max(0.0, min(1.0, g / 255.0))
         b_lin = max(0.0, min(1.0, b / 255.0))
         col_packed = struct.pack("ffff", r_lin, g_lin, b_lin, 1.0)
 
-        # -- Method 0: Write to DynamicMaterialInstance on component --
+        # -- Check cached color param address first (instant) --
+        if actor in self._camo_cache:
+            cached = self._camo_cache[actor]
+            if cached.get("color_addr"):
+                try:
+                    self.pm.write_bytes(cached["color_addr"], col_packed, 16)
+                    return True
+                except Exception:
+                    del self._camo_cache[actor]
+
+        # -- Method 1: Paint texture write (matches the mod's approach) --
         try:
             comp = self._find_runtime_paint_component(actor)
             if comp:
-                dyn_mat = self._get_component_property_ptr(comp, "DynamicMaterialInstance")
-                if dyn_mat:
-                    addr, _ = self._find_color_parameter(dyn_mat)
-                    if addr:
-                        self.pm.write_bytes(addr, col_packed, 16)
+                cls = self.objects.obj_class(comp)
+                if cls:
+                    tex = self._find_texture_on_component(actor)
+                if tex:
+                    if self._write_texture_flat(tex, r_byte, g_byte, b_byte):
+                        self._camo_cache[actor] = {"color_addr": None}
                         return True
-        except Exception:
-            pass
-
-        # -- Method 1: Find paint texture on component and write directly --
-        try:
-            tex = self._find_texture_on_component(actor)
-            if tex:
-                if self._write_texture_flat(tex, r_lin, g_lin, b_lin):
-                    return True
+                for hint in ("ColorAndOpacity", "Color", "Tint", "BaseColor", "PaintColor"):
+                    ptr = self._get_component_property_ptr(comp, hint)
+                    if ptr:
+                        self.pm.write_bytes(ptr, col_packed, 16)
+                        self._camo_cache[actor] = {"color_addr": ptr}
+                        return True
         except Exception:
             pass
 
@@ -1093,9 +1125,13 @@ class MecchaESP:
             mesh = self.get_skeletal_mesh(actor)
             if mesh:
                 for mat in self._get_mesh_materials(mesh):
-                    addr, _ = self._find_color_parameter(mat)
+                    addr, orig = self._find_color_parameter(mat)
                     if addr:
                         self.pm.write_bytes(addr, col_packed, 16)
+                        self._camo_cache[actor] = {
+                            "color_addr": addr,
+                            "orig_color": (int(orig[0]*255), int(orig[1]*255), int(orig[2]*255)),
+                        }
                         return True
         except Exception:
             pass
@@ -1104,23 +1140,18 @@ class MecchaESP:
         try:
             cls = self.objects.obj_class(actor)
             if cls:
+                hints = ["color", "tint", "body", "skin", "paint", "base", "diffuse",
+                         "albedo", "mask", "channel", "rgb", "ambient", "emissive",
+                         "custom", "primary", "team", "character"]
                 comp = self._find_runtime_paint_component(actor)
                 if comp:
                     comp_cls = self.objects.obj_class(comp)
                     if comp_cls:
-                        hints = ["color", "tint", "body", "skin", "paint", "base", "diffuse",
-                                 "albedo", "mask", "channel", "rgb", "ambient", "emissive",
-                                 "custom", "primary", "team", "character"]
                         name, off = self.resolver.search_properties(comp_cls, hints)
                         if name and off >= 0:
                             try:
                                 self.pm.write_bytes(comp + off, col_packed, 16)
-                                return True
-                            except Exception:
-                                pass
-                            try:
-                                col32 = struct.pack("BBBB", int(b_lin*255), int(g_lin*255), int(r_lin*255), 255)
-                                self.pm.write_bytes(comp + off, col32, 4)
+                                self._camo_cache[actor] = {"color_addr": comp + off}
                                 return True
                             except Exception:
                                 pass
@@ -1128,12 +1159,7 @@ class MecchaESP:
                 if name and off >= 0:
                     try:
                         self.pm.write_bytes(actor + off, col_packed, 16)
-                        return True
-                    except Exception:
-                        pass
-                    try:
-                        col32 = struct.pack("BBBB", int(b_lin*255), int(g_lin*255), int(r_lin*255), 255)
-                        self.pm.write_bytes(actor + off, col32, 4)
+                        self._camo_cache[actor] = {"color_addr": actor + off}
                         return True
                     except Exception:
                         pass
