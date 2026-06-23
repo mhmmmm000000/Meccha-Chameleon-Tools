@@ -1,10 +1,16 @@
-[![Build EXE](https://github.com/SilentJMA/Meccha-Chameleon-Tools/actions/workflows/build.yml/badge.svg)](https://github.com/SilentJMA/Meccha-Chameleon-Tools/actions/workflows/build.yml)
-
+<div align="center">
+  
 <img src="preview.png" alt="Meccha Chameleon Tools" width="100%"/>
+
+[![Build EXE](https://github.com/SilentJMA/Meccha-Chameleon-Tools/actions/workflows/build.yml/badge.svg)](https://github.com/SilentJMA/Meccha-Chameleon-Tools/actions/workflows/build.yml)
 
 # Meccha Chameleon Tools
 
 External ESP - Aimbot - Radar for MECCA CHAMELEON (UE5) - Camouflage WIP
+
+</div>
+
+---
 
 ## Features
 
@@ -58,17 +64,24 @@ WARNING: This feature is in DEVELOPMENT and disabled by default.
 ### How to use
 
 1. **Enable at startup** -- A dialog asks "Would you like to enable camouflage?" Click **Yes** to activate.
+
 <img width="505" height="236" alt="image" src="https://github.com/user-attachments/assets/a3607aff-dd41-4e12-8f8e-aca47b35d03c" />
+
 If you click Yes
+
 <img width="552" height="232" alt="image" src="https://github.com/user-attachments/assets/bfe7769c-4ba1-431e-88d8-cfcdfb1890cd" />
+
 success
+
 <img width="496" height="138" alt="image" src="https://github.com/user-attachments/assets/a534fe20-4cfe-434e-b659-1d9f15f7fcf9" />
+
 make sure the game start with next run
+
 <img width="414" height="171" alt="image" src="https://github.com/user-attachments/assets/f58eba89-440d-4183-96d6-1a2574c57b8a" />
 
-3. **Or enable later** -- Open settings (Insert/F1), go to the CAMOUFLAGE tab, check "Camouflage Enabled".
-4. **Sample and apply** -- Press **F10** in-game to sample screen color and apply to character's 3D model.
-5. **Toggle off** -- Press F10 again to restore original color.
+2. **Or enable later** -- Open settings (Insert/F1), go to the CAMOUFLAGE tab, check "Camouflage Enabled".
+3. **Sample and apply** -- Press **F10** in-game to sample screen color and apply to character's 3D model.
+4. **Toggle off** -- Press F10 again to restore original color.
 
 > The setting is per-session. You will be prompted again each launch.
 
