@@ -4,6 +4,7 @@ import math
 import ctypes
 import sys
 import time
+import webbrowser
 from typing import Tuple, Optional
 
 from PyQt5.QtWidgets import (
@@ -262,49 +263,179 @@ def draw_radar(painter, cam, local_pos, players, radar_cx, radar_cy, radar_size,
 # ---------------------------------------------------------------------------
 # Menu widget
 # ---------------------------------------------------------------------------
+GITHUB_URL = "https://github.com/SilentJMA/Meccha-Chameleon-Tools"
+TAB_NAMES = ["ESP", "HEALTH", "RADAR", "AIMBOT", "COLORS", "CAMO", "SETTINGS"]
+
+
 class Menu(QWidget):
     STYLE = """
-        QFrame {
-            background-color: rgba(14, 14, 20, 240);
-            border: 1px solid #2a2a3e;
-            border-radius: 10px;
+        QFrame#menuFrame {
+            background-color: #0E1018;
+            border: 1px solid #1B1E2A;
+            border-radius: 12px;
         }
-        QLabel { color: #bbb; font-size: 11px; }
-        QCheckBox { color: #ccc; font-size: 11px; spacing: 8px; padding: 1px 0; }
-        QCheckBox::indicator { width: 15px; height: 15px; border-radius: 3px; border: 1px solid #444; background: #1a1a28; }
+        QLabel {
+            color: #9CA3AF; font-size: 11px;
+            font-family: "Segoe UI", "Inter", "SF Pro Text", sans-serif;
+        }
+        QLabel#titleLbl {
+            color: #F3F4F6; font-size: 13px; font-weight: bold;
+            letter-spacing: 3px; padding: 2px 0 0 0;
+        }
+        QLabel#subtitleLbl {
+            color: #6B7280; font-size: 9px; letter-spacing: 1px;
+            padding: 0 0 4px 0;
+        }
+        QLabel#sectionLbl {
+            color: #7C3AED; font-size: 9px; font-weight: bold;
+            letter-spacing: 2px; padding: 10px 0 4px 2px;
+        }
+        QLabel#hintLbl {
+            color: #4B5563; font-size: 9px; line-height: 14px;
+        }
+        QLabel#statusOn {
+            color: #10B981; font-size: 10px; font-weight: bold;
+        }
+        QLabel#statusOff {
+            color: #6B7280; font-size: 10px; font-weight: bold;
+        }
+        QLabel#linkLbl {
+            color: #7C3AED; font-size: 10px;
+        }
+        QLabel#linkLbl:hover { color: #A78BFA; }
+        QCheckBox {
+            color: #D1D5DB; font-size: 11px; spacing: 8px; padding: 2px 0;
+            font-family: "Segoe UI", sans-serif;
+        }
+        QCheckBox::indicator {
+            width: 14px; height: 14px; border-radius: 4px;
+            border: 1px solid #2D3142; background: #161922;
+        }
+        QCheckBox::indicator:hover { border-color: #7C3AED; }
         QCheckBox::indicator:checked {
-            background: #3a6ea5; border-color: #5a8ec5;
+            background: #7C3AED; border-color: #8B5CF6;
         }
         QComboBox {
-            background-color: #333; color: #eee;
-            border: 1px solid #555; padding: 4px;
-        }
-        QPushButton {
-            background-color: #22223a; color: #ccc;
-            border: 1px solid #33334a; padding: 5px 10px; border-radius: 5px;
-            font-size: 11px;
-        }
-        QPushButton:hover { background-color: #2e2e4a; border-color: #4a4a6a; }
-        QPushButton:pressed { background-color: #3a3a5a; }
-        QSpinBox, QDoubleSpinBox {
-            background-color: #1a1a28; color: #ccc;
-            border: 1px solid #33334a; padding: 1px 3px; border-radius: 3px;
+            background-color: #161922; color: #E5E7EB;
+            border: 1px solid #2D3142; padding: 4px 8px; border-radius: 6px;
             font-size: 11px; min-height: 20px;
         }
-        QSpinBox:focus, QDoubleSpinBox:focus { border-color: #5a8ec5; }
+        QComboBox:hover { border-color: #7C3AED; }
+        QComboBox::drop-down { border: none; width: 20px; }
+        QComboBox::down-arrow {
+            image: none; border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #6B7280; width: 0; height: 0;
+            margin-right: 6px;
+        }
+        QComboBox QAbstractItemView {
+            background-color: #161922; color: #E5E7EB;
+            selection-background-color: #7C3AED; selection-color: #FFFFFF;
+            border: 1px solid #2D3142; outline: none; padding: 4px;
+        }
+        QPushButton {
+            background-color: #161922; color: #D1D5DB;
+            border: 1px solid #2D3142; padding: 6px 12px; border-radius: 6px;
+            font-size: 11px; font-family: "Segoe UI", sans-serif;
+        }
+        QPushButton:hover {
+            background-color: #1B1F2E; border-color: #7C3AED; color: #F3F4F6;
+        }
+        QPushButton:pressed { background-color: #11141D; }
+        QPushButton#primaryBtn {
+            background-color: #7C3AED; border: 1px solid #8B5CF6;
+            color: #FFFFFF; font-weight: bold;
+        }
+        QPushButton#primaryBtn:hover {
+            background-color: #8B5CF6; border-color: #A78BFA;
+        }
+        QPushButton#primaryBtn:pressed { background-color: #6D28D9; }
+        QPushButton#dangerBtn {
+            background-color: #161922; border: 1px solid #3B1D1D; color: #FCA5A5;
+        }
+        QPushButton#dangerBtn:hover {
+            background-color: #1F1518; border-color: #DC2626; color: #FEE2E2;
+        }
+        QPushButton#githubBtn {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #13162A, stop:1 #1A1B33);
+            border: 1px solid #2A2D4A; color: #E5E7EB;
+            padding: 8px 12px; border-radius: 8px;
+            text-align: left; font-size: 11px; font-weight: bold;
+        }
+        QPushButton#githubBtn:hover {
+            border-color: #7C3AED; color: #FFFFFF;
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #1A1D36, stop:1 #23254A);
+        }
+        QSpinBox, QDoubleSpinBox {
+            background-color: #161922; color: #E5E7EB;
+            border: 1px solid #2D3142; padding: 3px 6px; border-radius: 4px;
+            font-size: 11px; min-height: 20px; min-width: 60px;
+        }
+        QSpinBox:focus, QDoubleSpinBox:focus { border-color: #7C3AED; }
+        QSpinBox::up-button, QDoubleSpinBox::up-button {
+            background-color: #1B1F2E; border: none; width: 16px; border-radius: 2px;
+        }
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            background-color: #1B1F2E; border: none; width: 16px; border-radius: 2px;
+        }
+        QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+        QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+            background-color: #7C3AED;
+        }
+        QSlider::groove:horizontal {
+            border: none; height: 4px; background: #161922; border-radius: 2px;
+        }
+        QSlider::sub-page:horizontal {
+            background: #7C3AED; border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: #F3F4F6; border: 2px solid #7C3AED;
+            width: 10px; height: 10px; margin: -5px 0; border-radius: 8px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #8B5CF6; border-color: #A78BFA;
+        }
+    """
+
+    TAB_STYLE = """
+        QListWidget {
+            background: #0A0C12; border: 1px solid #1B1E2A;
+            border-radius: 8px; padding: 6px; outline: none;
+        }
+        QListWidget::item {
+            color: #6B7280; padding: 10px 8px; border-radius: 6px;
+            font-size: 10px; font-weight: bold; letter-spacing: 1.5px;
+            margin: 1px 0;
+        }
+        QListWidget::item:selected {
+            background: #7C3AED; color: #FFFFFF;
+        }
+        QListWidget::item:hover:!selected {
+            background: #161922; color: #D1D5DB;
+        }
     """
 
     def __init__(self, config: Config, esp: MecchaESP):
         super().__init__()
         self.config = config
         self.esp = esp
+        # Ensure auto_start_with_game attribute exists on config (for older Config classes)
+        if not hasattr(self.config, 'auto_start_with_game'):
+            setattr(self.config, 'auto_start_with_game', False)
         self.setWindowTitle("Meccha Chameleon Tools")
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self._drag_pos = None
         self._key_recorder = KeyRecorder(self._on_key_recorded)
         self._build_ui()
-        self.setFixedSize(500, 560)
+        self.setFixedSize(540, 620)
+        # Auto-start polling timer (checks for game window every 2s)
+        self._auto_start_timer = QTimer(self)
+        self._auto_start_timer.timeout.connect(self._poll_auto_start)
+        self._auto_start_timer.start(2000)
+        self._poll_auto_start()  # initial check
 
     def _close_app(self):
         QApplication.quit()
@@ -320,46 +451,42 @@ class Menu(QWidget):
         container.setObjectName("menuFrame")
         container.setStyleSheet(self.STYLE)
         outer = QVBoxLayout(container)
-        outer.setContentsMargins(12, 8, 12, 8)
-        outer.setSpacing(6)
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
 
-        # Title
-        title = QLabel("MECCA CHAMELION TOOLS")
+        # GitHub banner
+        self.btn_github = QPushButton("  ★  SilentJMA / Meccha-Chameleon-Tools  →")
+        self.btn_github.setObjectName("githubBtn")
+        self.btn_github.setCursor(Qt.PointingHandCursor)
+        self.btn_github.clicked.connect(self._open_github)
+        outer.addWidget(self.btn_github)
+
+        # Title block
+        title = QLabel("MECCHA CHAMELEON TOOLS")
         title.setObjectName("titleLbl")
         title.setAlignment(Qt.AlignCenter)
         outer.addWidget(title)
+        subtitle = QLabel("ESP  •  RADAR  •  AIMBOT  •  CAMOUFLAGE")
+        subtitle.setObjectName("subtitleLbl")
+        subtitle.setAlignment(Qt.AlignCenter)
+        outer.addWidget(subtitle)
 
         # Tab list + stacked pages
         body = QHBoxLayout()
         body.setSpacing(8)
 
         self.tab_list = QListWidget()
-        self.tab_list.setFixedWidth(90)
+        self.tab_list.setFixedWidth(100)
         self.tab_list.setFocusPolicy(Qt.NoFocus)
-        self.tab_list.setStyleSheet("""
-            QListWidget {
-                background: #1a1a28; border: 1px solid #2a2a3e;
-                border-radius: 6px; padding: 4px; outline: none;
-            }
-            QListWidget::item {
-                color: #888; padding: 8px 6px; border-radius: 4px;
-                font-size: 11px; font-weight: bold;
-            }
-            QListWidget::item:selected {
-                background: #2a3a5a; color: #8ab4f8;
-            }
-            QListWidget::item:hover:!selected {
-                background: #22223a; color: #aaa;
-            }
-        """)
-        self.tab_list.addItems(["ESP","HEALTH","RADAR","AIMBOT","COLORS","CAMOUFLAGE"])
+        self.tab_list.setStyleSheet(self.TAB_STYLE)
+        self.tab_list.addItems(TAB_NAMES)
         self.tab_list.currentRowChanged.connect(self._switch_tab)
 
         self.stack = QStackedWidget()
         self.stack.setStyleSheet("background: transparent;")
 
         self._pages = {}
-        for tab_name in ["ESP","HEALTH","RADAR","AIMBOT","COLORS","CAMOUFLAGE"]:
+        for tab_name in TAB_NAMES:
             page = QWidget()
             page.setStyleSheet("background: transparent;")
             self._pages[tab_name] = page
@@ -373,13 +500,16 @@ class Menu(QWidget):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         self.btn_save = QPushButton("Save Config")
+        self.btn_save.setObjectName("primaryBtn")
+        self.btn_save.setCursor(Qt.PointingHandCursor)
         self.btn_save.clicked.connect(self._save_config)
         self.btn_close = QPushButton("Close")
+        self.btn_close.setObjectName("dangerBtn")
+        self.btn_close.setCursor(Qt.PointingHandCursor)
         self.btn_close.clicked.connect(self._close_app)
-        self.btn_close.setStyleSheet("QPushButton { background-color: #3a1a1a; border-color: #5a2a2a; } QPushButton:hover { background-color: #5a2a2a; }")
 
-        hint = QLabel("Ins/F1 toggle | Drag to move")
-        hint.setStyleSheet("color: #555; font-size: 9px;")
+        hint = QLabel("Ins/F1 toggle  |  Drag to move")
+        hint.setObjectName("hintLbl")
         bar.addWidget(self.btn_save)
         bar.addWidget(self.btn_close)
         bar.addStretch()
@@ -398,33 +528,40 @@ class Menu(QWidget):
         self._build_aimbot_tab()
         self._build_colors_tab()
         self._build_camouflage_tab()
+        self._build_settings_tab()
 
     def _switch_tab(self, idx):
-        names = ["ESP","HEALTH","RADAR","AIMBOT","COLORS","CAMOUFLAGE"]
-        if 0 <= idx < len(names):
+        if 0 <= idx < len(TAB_NAMES):
             self.stack.setCurrentIndex(idx)
+
+    def _section(self, text):
+        lbl = QLabel(text)
+        lbl.setObjectName("sectionLbl")
+        return lbl
 
     def _build_esp_tab(self):
         p = self._pages["ESP"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(4)
-        self.cb_enabled = self._chk("ESP Enabled","enabled")
+        lo.addWidget(self._section("DISPLAY"))
+        self.cb_enabled = self._chk("ESP Enabled", "enabled")
         lo.addWidget(self.cb_enabled)
         row = QHBoxLayout()
         row.setSpacing(6)
-        self.cb_dot = self._chk("Dot","dot_esp")
-        self.cb_box = self._chk("2D Box","box_esp")
-        self.cb_skeleton = self._chk("Skeleton","skeleton_esp")
-        row.addWidget(self.cb_dot)
-        row.addWidget(self.cb_box)
-        row.addWidget(self.cb_skeleton)
+        self.cb_dot = self._chk("Dot", "dot_esp")
+        self.cb_box = self._chk("2D Box", "box_esp")
+        self.cb_skeleton = self._chk("Skeleton", "skeleton_esp")
+        for w in (self.cb_dot, self.cb_box, self.cb_skeleton):
+            row.addWidget(w)
         lo.addLayout(row)
-        for cfg, label in [("show_local","Show Local Player"), ("show_names","Show Names"),
-                           ("show_distance","Show Distance"), ("snap_lines","Snap Lines"),
-                           ("team_filter","Team Filter"), ("distance_scaling","Dist. Scaling")]:
+        lo.addWidget(self._section("OPTIONS"))
+        for cfg, label in [("show_local", "Show Local Player"), ("show_names", "Show Names"),
+                           ("show_distance", "Show Distance"), ("snap_lines", "Snap Lines"),
+                           ("team_filter", "Team Filter"), ("distance_scaling", "Dist. Scaling")]:
             cb = self._chk(label, cfg)
             lo.addWidget(cb)
+        lo.addWidget(self._section("SIZING"))
         dr = QHBoxLayout()
         dr.addWidget(QLabel("Dot Radius:"))
         self.spn_dot = QSpinBox()
@@ -432,18 +569,21 @@ class Menu(QWidget):
         self.spn_dot.setValue(self.config.dot_radius)
         self.spn_dot.valueChanged.connect(lambda v: setattr(self.config, "dot_radius", v))
         dr.addWidget(self.spn_dot)
+        dr.addStretch()
         lo.addLayout(dr)
         lo.addStretch()
 
     def _build_health_tab(self):
         p = self._pages["HEALTH"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(4)
-        self.cb_hp = self._chk("Health Bar","health_bar")
-        self.cb_shield = self._chk("Shield Bar","shield_bar")
+        lo.addWidget(self._section("BARS"))
+        self.cb_hp = self._chk("Health Bar", "health_bar")
+        self.cb_shield = self._chk("Shield Bar", "shield_bar")
         lo.addWidget(self.cb_hp)
         lo.addWidget(self.cb_shield)
+        lo.addWidget(self._section("MODEL"))
         hr = QHBoxLayout()
         hr.addWidget(QLabel("Model Height:"))
         self.spn_height = QSpinBox()
@@ -451,6 +591,7 @@ class Menu(QWidget):
         self.spn_height.setValue(int(self.config.box_height_world))
         self.spn_height.valueChanged.connect(lambda v: setattr(self.config, "box_height_world", float(v)))
         hr.addWidget(self.spn_height)
+        hr.addStretch()
         lo.addLayout(hr)
         yr = QHBoxLayout()
         yr.addWidget(QLabel("Y Offset:"))
@@ -459,15 +600,17 @@ class Menu(QWidget):
         self.spn_yoff.setValue(self.config.box_y_offset)
         self.spn_yoff.valueChanged.connect(lambda v: setattr(self.config, "box_y_offset", v))
         yr.addWidget(self.spn_yoff)
+        yr.addStretch()
         lo.addLayout(yr)
         lo.addStretch()
 
     def _build_radar_tab(self):
         p = self._pages["RADAR"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(4)
-        self.cb_radar = self._chk("Radar Enabled","radar_enabled")
+        lo.addWidget(self._section("RADAR"))
+        self.cb_radar = self._chk("Radar Enabled", "radar_enabled")
         lo.addWidget(self.cb_radar)
         sr = QHBoxLayout()
         sr.addWidget(QLabel("Radar Size:"))
@@ -476,6 +619,7 @@ class Menu(QWidget):
         self.spn_radar_size.setValue(self.config.radar_size)
         self.spn_radar_size.valueChanged.connect(lambda v: setattr(self.config, "radar_size", v))
         sr.addWidget(self.spn_radar_size)
+        sr.addStretch()
         lo.addLayout(sr)
         rr = QHBoxLayout()
         rr.addWidget(QLabel("Radar Range:"))
@@ -485,25 +629,31 @@ class Menu(QWidget):
         self.spn_radar_range.setValue(int(self.config.radar_range))
         self.spn_radar_range.valueChanged.connect(lambda v: setattr(self.config, "radar_range", float(v)))
         rr.addWidget(self.spn_radar_range)
+        rr.addStretch()
         lo.addLayout(rr)
         lo.addStretch()
 
     def _build_aimbot_tab(self):
         p = self._pages["AIMBOT"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(4)
-        self.cb_aimbot = self._chk("Aimbot Enabled","aimbot_enabled")
-        self.cb_aim_fov = self._chk("Show FOV Circle","aimbot_show_fov")
+        lo.addWidget(self._section("AIMBOT"))
+        self.cb_aimbot = self._chk("Aimbot Enabled", "aimbot_enabled")
+        self.cb_aim_fov = self._chk("Show FOV Circle", "aimbot_show_fov")
         lo.addWidget(self.cb_aimbot)
         lo.addWidget(self.cb_aim_fov)
+        lo.addWidget(self._section("KEY"))
         kr = QHBoxLayout()
         self.lbl_aim_key = QLabel("Aim Key: " + self.config.aimbot_key)
         self.btn_record_key = QPushButton("Record Key")
+        self.btn_record_key.setCursor(Qt.PointingHandCursor)
         self.btn_record_key.clicked.connect(self._start_aim_key_record)
         kr.addWidget(self.lbl_aim_key)
         kr.addWidget(self.btn_record_key)
+        kr.addStretch()
         lo.addLayout(kr)
+        lo.addWidget(self._section("TUNING"))
         fr = QHBoxLayout()
         fr.addWidget(QLabel("FOV Radius:"))
         self.spn_aim_fov = QSpinBox()
@@ -511,6 +661,7 @@ class Menu(QWidget):
         self.spn_aim_fov.setValue(self.config.aimbot_fov)
         self.spn_aim_fov.valueChanged.connect(lambda v: setattr(self.config, "aimbot_fov", v))
         fr.addWidget(self.spn_aim_fov)
+        fr.addStretch()
         lo.addLayout(fr)
         sr = QHBoxLayout()
         sr.addWidget(QLabel("Smooth:"))
@@ -520,6 +671,7 @@ class Menu(QWidget):
         self.spn_aim_smooth.setValue(self.config.aimbot_smooth)
         self.spn_aim_smooth.valueChanged.connect(lambda v: setattr(self.config, "aimbot_smooth", v))
         sr.addWidget(self.spn_aim_smooth)
+        sr.addStretch()
         lo.addLayout(sr)
         ar = QHBoxLayout()
         ar.addWidget(QLabel("Target Offset:"))
@@ -528,38 +680,45 @@ class Menu(QWidget):
         self.spn_aim_off.setValue(int(self.config.aimbot_target_offset))
         self.spn_aim_off.valueChanged.connect(lambda v: setattr(self.config, "aimbot_target_offset", float(v)))
         ar.addWidget(self.spn_aim_off)
+        ar.addStretch()
         lo.addLayout(ar)
         lo.addStretch()
 
     def _build_colors_tab(self):
         p = self._pages["COLORS"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(6)
+        lo.addWidget(self._section("COLOR PICKER"))
         self.btn_enemy_color = QPushButton("Enemy Color")
+        self.btn_enemy_color.setCursor(Qt.PointingHandCursor)
         self.btn_enemy_color.clicked.connect(lambda: self._pick_color("enemy_color"))
         self.btn_local_color = QPushButton("Local Color")
+        self.btn_local_color.setCursor(Qt.PointingHandCursor)
         self.btn_local_color.clicked.connect(lambda: self._pick_color("local_color"))
         self.btn_skeleton_color = QPushButton("Skeleton Color")
+        self.btn_skeleton_color.setCursor(Qt.PointingHandCursor)
         self.btn_skeleton_color.clicked.connect(lambda: self._pick_color("skeleton_color"))
         lo.addWidget(self.btn_enemy_color)
         lo.addWidget(self.btn_local_color)
         lo.addWidget(self.btn_skeleton_color)
+        hint = QLabel("Click a button to open the color picker.")
+        hint.setObjectName("hintLbl")
+        lo.addWidget(hint)
         lo.addStretch()
 
     def _build_camouflage_tab(self):
-        p = self._pages["CAMOUFLAGE"]
+        p = self._pages["CAMO"]
         lo = QVBoxLayout(p)
-        lo.setContentsMargins(4, 4, 4, 4)
+        lo.setContentsMargins(6, 6, 6, 6)
         lo.setSpacing(4)
-
-        self.cb_camo = self._chk("Camouflage Enabled (WIP - In Progress)","camouflage_enabled")
+        lo.addWidget(self._section("CAMOUFLAGE  (WIP)"))
+        self.cb_camo = self._chk("Camouflage Enabled (WIP - In Progress)", "camouflage_enabled")
         lo.addWidget(self.cb_camo)
-
         lbl = QLabel("Press F10 to sample and apply camouflage (WIP)")
-        lbl.setStyleSheet("color: #888; font-size: 10px; padding: 4px 0;")
+        lbl.setObjectName("hintLbl")
         lo.addWidget(lbl)
-
+        lo.addWidget(self._section("SAMPLING"))
         sr = QHBoxLayout()
         sr.addWidget(QLabel("Sample Grid:"))
         self.spn_camo_size = QSpinBox()
@@ -567,9 +726,9 @@ class Menu(QWidget):
         self.spn_camo_size.setValue(self.config.camouflage_sample_size)
         self.spn_camo_size.valueChanged.connect(lambda v: setattr(self.config, "camouflage_sample_size", v))
         sr.addWidget(self.spn_camo_size)
-        sr.addWidget(QLabel("(N×N pixels, centered on crosshair)"))
+        sr.addWidget(QLabel("(N×N)"))
+        sr.addStretch()
         lo.addLayout(sr)
-
         # Opacity slider
         or_ = QHBoxLayout()
         or_.addWidget(QLabel("Blend:"))
@@ -579,11 +738,40 @@ class Menu(QWidget):
         self.sld_camo_opacity.valueChanged.connect(lambda v: setattr(self.config, "camouflage_opacity", v))
         or_.addWidget(self.sld_camo_opacity)
         self.lbl_camo_val = QLabel(str(self.config.camouflage_opacity))
-        self.lbl_camo_val.setStyleSheet("color: #eee; font-size: 11px; min-width: 30px;")
+        self.lbl_camo_val.setStyleSheet("color: #E5E7EB; font-size: 11px; min-width: 30px;")
         self.sld_camo_opacity.valueChanged.connect(lambda v: self.lbl_camo_val.setText(str(v)))
         or_.addWidget(self.lbl_camo_val)
         lo.addLayout(or_)
+        lo.addStretch()
 
+    def _build_settings_tab(self):
+        p = self._pages["SETTINGS"]
+        lo = QVBoxLayout(p)
+        lo.setContentsMargins(6, 6, 6, 6)
+        lo.setSpacing(4)
+        lo.addWidget(self._section("AUTOMATION"))
+        self.cb_auto_start = self._chk("Auto-start when game is detected", "auto_start_with_game")
+        lo.addWidget(self.cb_auto_start)
+        hint = QLabel("When enabled, this menu will automatically appear when the game window is detected.")
+        hint.setObjectName("hintLbl")
+        hint.setWordWrap(True)
+        lo.addWidget(hint)
+        lo.addWidget(self._section("GAME STATUS"))
+        self.lbl_game_status = QLabel("● Checking...")
+        self.lbl_game_status.setObjectName("statusOff")
+        lo.addWidget(self.lbl_game_status)
+        lo.addWidget(self._section("ABOUT"))
+        about = QLabel("Meccha Chameleon Tools — ESP / radar / aimbot / camouflage overlay for the Chameleon game.")
+        about.setObjectName("hintLbl")
+        about.setWordWrap(True)
+        lo.addWidget(about)
+        lo.addWidget(self._section("REPOSITORY"))
+        link = QLabel(f'<a href="{GITHUB_URL}" style="color:#7C3AED;">{GITHUB_URL}</a>')
+        link.setObjectName("linkLbl")
+        link.setOpenExternalLinks(True)
+        link.setTextFormat(Qt.RichText)
+        link.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        lo.addWidget(link)
         lo.addStretch()
 
     def _chk(self, text, attr):
@@ -610,6 +798,38 @@ class Menu(QWidget):
         else:
             self.btn_save.setText('Save Failed!')
             QTimer.singleShot(1500, lambda: self.btn_save.setText('Save Config'))
+
+    def _open_github(self):
+        webbrowser.open(GITHUB_URL)
+
+    def _find_game_window(self):
+        try:
+            import win32gui
+            return win32gui.FindWindow(None, "Chameleon  ")
+        except Exception:
+            return 0
+
+    def _poll_auto_start(self):
+        """Poll for game window and auto-show menu if toggle is enabled."""
+        hwnd = self._find_game_window()
+        game_running = bool(hwnd)
+        # Update status label
+        if hasattr(self, 'lbl_game_status'):
+            if game_running:
+                self.lbl_game_status.setText("●  Game detected")
+                self.lbl_game_status.setObjectName("statusOn")
+            else:
+                self.lbl_game_status.setText("●  Waiting for game...")
+                self.lbl_game_status.setObjectName("statusOff")
+            # Force style refresh
+            self.lbl_game_status.style().unpolish(self.lbl_game_status)
+            self.lbl_game_status.style().polish(self.lbl_game_status)
+        # Auto-show menu if enabled and game is detected
+        if getattr(self.config, 'auto_start_with_game', False) and game_running:
+            if not self.isVisible():
+                self.show()
+                self.raise_()
+                self.activateWindow()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -654,7 +874,7 @@ class Overlay(QWidget):
         self._paint_indicator_est_sec = 10.0  # estimated duration (reduced from 60s)
         # F9 direct texture paint (independent of mod's F10 camo)
         self._f9_key_held = False
-        self._f9_color = None        # (r,g,b) last sampled color  
+        self._f9_color = None        # (r,g,b) last sampled color
         self._f9_feedback = ""
         self._f9_feedback_count = 0
         self._paint_tiles = None       # list of (offset, data) for tile writes
