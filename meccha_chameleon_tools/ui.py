@@ -651,12 +651,12 @@ class Overlay(QWidget):
         self._original_pawn_color = None  # (r,g,b) to restore when camo toggled off
         self._paint_indicator_active = False  # True when C++ mod paint pipeline is running
         self._paint_indicator_start = 0.0     # time.time() when paint started
-        self._paint_indicator_est_sec = 60.0  # estimated duration
-        # F11 direct texture paint (independent of mod's F10 camo)
-        self._f11_key_held = False
-        self._f11_color = None        # (r,g,b) last sampled color  
-        self._f11_feedback = ""
-        self._f11_feedback_count = 0
+        self._paint_indicator_est_sec = 10.0  # estimated duration (reduced from 60s)
+        # F9 direct texture paint (independent of mod's F10 camo)
+        self._f9_key_held = False
+        self._f9_color = None        # (r,g,b) last sampled color  
+        self._f9_feedback = ""
+        self._f9_feedback_count = 0
         self._paint_tiles = None       # list of (offset, data) for tile writes
         self._paint_tile_cursor = 0
         self._paint_tile_total = 0
@@ -715,47 +715,53 @@ class Overlay(QWidget):
         if f10_down and not self._camo_key_held:
             if self.config.camouflage_enabled:
                 self._toggle_camouflage()
-            # Always show paint indicator when F10 pressed (used by C++ mod too)
-            self._paint_indicator_active = True
-            self._paint_indicator_start = time.time()
+                # Only show paint indicator when camouflage was actually toggled
+                if self._camouflage_active:
+                    self._paint_indicator_active = True
+                    self._paint_indicator_start = time.time()
+            else:
+                # Brief feedback that camouflage is disabled
+                self._camo_feedback = "CAMO DISABLED (Enable in menu)"
+                self._camo_feedback_count = 120  # ~2 seconds
         self._camo_key_held = f10_down
 
-        # F11: sample color and start tile-based texture paint
-        VK_F11 = 0x7A
-        f11_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_F11) & 0x8000)
-        if f11_down and not self._f11_key_held:
-            self._trigger_f11_paint()
-        self._f11_key_held = f11_down
+        # F9: sample color and start tile-based texture paint
+        VK_F9 = 0x78
+        f9_down = bool(ctypes.windll.user32.GetAsyncKeyState(VK_F9) & 0x8000)
+        if f9_down and not self._f9_key_held:
+            self._trigger_f9_paint()
+        self._f9_key_held = f9_down
 
     def _toggle_camouflage(self):
         """Toggle camouflage on/off. When turning on, sample screen and write to 3D model."""
         if self._camouflage_active:
             # Turn OFF: restore original color
+            restored = False
             if self._original_pawn_color:
                 local_pawn = self.esp._get_local_pawn()
                 if local_pawn:
                     r, g, b = self._original_pawn_color
-                    self.esp.set_camouflage_color(local_pawn, r, g, b)
+                    restored = self.esp.set_camouflage_color(local_pawn, r, g, b)
             self._camouflage_active = False
             self._camouflage_color = None
             self._original_pawn_color = None
-            self._camo_feedback = "CAMO OFF"
-            self._camo_feedback_count = 10
+            self._camo_feedback = "RESTORED" if restored else "CAMO OFF"
+            self._camo_feedback_count = 120
         else:
             # Turn ON: sample screen and apply to local pawn
             self._camo_feedback = "SAMPLING..."
-            self._camo_feedback_count = 5
+            self._camo_feedback_count = 60
             color = self._sample_screen_color()
             if not color:
                 self._camo_feedback = "SAMPLE FAIL"
-                self._camo_feedback_count = 20
+                self._camo_feedback_count = 120
                 return
 
             r, g, b = color
             local_pawn = self.esp._get_local_pawn()
             if not local_pawn:
                 self._camo_feedback = "NO PAWN FOUND"
-                self._camo_feedback_count = 20
+                self._camo_feedback_count = 120
                 return
 
             # Save original color
@@ -769,10 +775,10 @@ class Overlay(QWidget):
                 self._camouflage_color = color
                 self._camouflage_active = True
                 self._camo_feedback = "CAMO ON"
-                self._camo_feedback_count = 30
+                self._camo_feedback_count = 150
             else:
                 self._camo_feedback = "MATL FAIL"
-                self._camo_feedback_count = 20
+                self._camo_feedback_count = 120
 
     def _sample_screen_color(self):
         """Sample N×N pixels around crosshair. Tries game DC, desktop DC, then BitBlt fallback."""
@@ -872,35 +878,35 @@ class Overlay(QWidget):
         except Exception:
             return None
 
-    def _trigger_f11_paint(self):
-        """F11 direct paint: sample screen color, write to paint texture."""
-        self._f11_feedback = "PIX..."
-        self._f11_feedback_count = 5
+    def _trigger_f9_paint(self):
+        """F9 direct paint: sample screen color, write to paint texture."""
+        self._f9_feedback = "PIX..."
+        self._f9_feedback_count = 5
         color = self._sample_screen_color()
         if not color:
-            self._f11_feedback = "NO SAMPLE"
-            self._f11_feedback_count = 20
+            self._f9_feedback = "NO SAMPLE"
+            self._f9_feedback_count = 20
             return
         r, g, b = color
-        self._f11_color = (r, g, b)
+        self._f9_color = (r, g, b)
         local_pawn = self.esp._get_local_pawn()
         if not local_pawn:
-            self._f11_feedback = "NO PAWN"
-            self._f11_feedback_count = 20
+            self._f9_feedback = "NO PAWN"
+            self._f9_feedback_count = 20
             return
         # Try direct paint — this uses the texture write in set_camouflage_color
         ok = self.esp.set_camouflage_color(local_pawn, r, g, b)
         if ok:
-            self._f11_feedback = f"PIX OK ({r},{g},{b})"
-            self._f11_feedback_count = 30
+            self._f9_feedback = f"PIX OK ({r},{g},{b})"
+            self._f9_feedback_count = 30
             # Now queue tile-progressive paint for the visual "bit by bit" effect
             self._queue_tile_paint(local_pawn, r, g, b)
         else:
-            self._f11_feedback = "PIX FAIL"
-            self._f11_feedback_count = 20
+            self._f9_feedback = "PIX FAIL"
+            self._f9_feedback_count = 20
 
     def _queue_tile_paint(self, pawn, r, g, b):
-        """For F11 tile-progressive mode: find texture, split into tiles, queue writes.
+        """For F9 tile-progressive mode: find texture, split into tiles, queue writes.
         Each frame writes one tile, creating a 'painting' effect on the model."""
         comp = self.esp._find_runtime_paint_component(pawn)
         if not comp:
@@ -940,8 +946,8 @@ class Overlay(QWidget):
         self._paint_tiles = tiles
         self._paint_tile_cursor = 0
         self._paint_tile_total = len(tiles)
-        self._f11_feedback = f"TILES {self._paint_tile_total}"
-        self._f11_feedback_count = 10
+        self._f9_feedback = f"TILES {self._paint_tile_total}"
+        self._f9_feedback_count = 10
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1089,19 +1095,19 @@ class Overlay(QWidget):
             painter.setPen(QPen(QColor(80, 80, 80)))
             painter.drawText(10, 40, "CAMO OFF (F10)")
 
-        # F11 direct paint feedback
-        if self._f11_feedback_count > 0 and self._f11_feedback:
-            self._f11_feedback_count -= 1
+        # F9 direct paint feedback
+        if self._f9_feedback_count > 0 and self._f9_feedback:
+            self._f9_feedback_count -= 1
             painter.setPen(QPen(QColor(0, 220, 120)))
-            painter.drawText(10, 56, self._f11_feedback)
+            painter.drawText(10, 56, self._f9_feedback)
         elif self._paint_tiles is not None:
             painter.setPen(QPen(QColor(0, 220, 120)))
             painter.drawText(10, 56, f"TILING {self._paint_tile_cursor}/{self._paint_tile_total}")
         else:
             painter.setPen(QPen(QColor(80, 80, 80)))
-            painter.drawText(10, 56, "F11 = DIRECT PAINT")
+            painter.drawText(10, 56, "F9 = DIRECT PAINT")
 
-        # F11 tile-progressive paint (writes tiles per frame for smooth effect)
+        # F9 tile-progressive paint (writes tiles per frame for smooth effect)
         if self._paint_tiles is not None and self._paint_tile_cursor < self._paint_tile_total:
             tiles = self._paint_tiles
             cursor = self._paint_tile_cursor
@@ -1127,11 +1133,11 @@ class Overlay(QWidget):
                 painter.drawRect(bar_x + 1, bar_y + 1, max(1, fill_w - 2), bar_h - 2)
             painter.setPen(QPen(QColor(255, 255, 255)))
             painter.setBrush(Qt.NoBrush)
-            painter.drawText(bar_x + 5, bar_y + 10, f"F11 TILE {batch_end}/{self._paint_tile_total}")
+            painter.drawText(bar_x + 5, bar_y + 10, f"F9 TILE {batch_end}/{self._paint_tile_total}")
             if batch_end >= self._paint_tile_total:
                 self._paint_tiles = None
-                self._f11_feedback = "TILE DONE"
-                self._f11_feedback_count = 30
+                self._f9_feedback = "TILE DONE"
+                self._f9_feedback_count = 30
 
         # Paint pipeline progress indicator (C++ mod activity)
         if self._paint_indicator_active:

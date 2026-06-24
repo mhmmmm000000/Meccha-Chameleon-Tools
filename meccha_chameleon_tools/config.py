@@ -61,6 +61,9 @@ class Config:
     camouflage_sample_size: int = 10
     camouflage_opacity: int = 200
 
+    # Game directory
+    game_directory: str = r"C:\Program Files (x86)\Steam\steamapps\common\MECCA CHAMELEON\Chameleon\Binaries\Win64"
+
     # Bone indices (fallback if name resolution fails)
     # Common UE5 mannequin bone indices
     bone_indices: dict = field(default_factory=lambda: {

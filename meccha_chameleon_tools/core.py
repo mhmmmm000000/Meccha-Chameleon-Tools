@@ -463,6 +463,13 @@ class MecchaESP:
         self._camo_cache = {}
         self._tex_cache = {}      # texture_addr -> {data_ptr, size}
 
+        # Pymem 1.14 compatibility aliases
+        self.read_u64 = self.pm.read_longlong
+        self.read_u32 = self.pm.read_ulong
+        self.read_u16 = lambda a: struct.unpack("<H", self.pm.read_bytes(a, 2))[0]
+        self.read_float = lambda a: struct.unpack("<f", self.pm.read_bytes(a, 4))[0]
+        self.write_u64 = lambda a, v: self.pm.write_bytes(a, struct.pack("<Q", v), 8)
+
     def _scan_guobject_array(self):
         scanner = PatternScanner(self.pm, self.MODULE_NAME)
         addr = scanner.scan(self.GUOBJECT_SIG, self.GUOBJECT_MASK)
@@ -606,7 +613,7 @@ class MecchaESP:
             return cached
         off = self.resolver.resolve("Actor", "OwnedComponents")
         if off is None:
-            off = 0xD0
+            off = 0x1E0  # UE5.6 AActor::OwnedComponents (confirmed via comp_scan.py)
         self._owned_components_off = off
         return off
 
@@ -870,7 +877,7 @@ class MecchaESP:
         """Get material instance pointers from a mesh component.
         Tries a wide range of offsets for the Materials TArray."""
         # Broader offset range for Materials TArray
-        for off in range(0x4A0, 0x550, 8):
+        for off in range(0x480, 0x5C0, 8):
             try:
                 data, count = read_tarray_ptr(self.pm, mesh_component + off)
                 if data and 1 <= count <= 32:
@@ -891,18 +898,18 @@ class MecchaESP:
         """Brute-force find a vector parameter with valid FLinearColor on a material instance.
         Only returns addresses verified to be within the TArray data bounds."""
         # Wider range of offsets for VectorParameterValues TArray
-        for off in range(0x38, 0x140, 8):
+        for off in range(0x30, 0x180, 8):
             try:
                 data, count = read_tarray_ptr(self.pm, material + off)
                 if not data or count == 0 or count > 64:
                     continue
                 # Try multiple struct strides
-                for stride in (0x18, 0x20, 0x28, 0x30):
+                for stride in (0x18, 0x20, 0x28, 0x30, 0x38, 0x40):
                     data_end = data + count * stride
                     for j in range(min(count, 32)):
                         param_addr = data + j * stride
                         # Try FLinearColor at known field offsets within the struct
-                        for color_off in (0x10, 0x14, 0x18):
+                        for color_off in (0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C, 0x20):
                             color_addr = param_addr + color_off
                             # CRITICAL: only accept addresses inside the TArray data range
                             if not (data <= color_addr < data_end and color_addr + 16 <= data_end):
@@ -1077,6 +1084,113 @@ class MecchaESP:
         except Exception:
             return None
 
+    def _find_paintatuv_function(self, actor):
+        # Dynamically find PaintAtUV UFunction
+        try:
+            comp = self._find_runtime_paint_component(actor)
+            if not comp: return 0
+            cls = self.objects.obj_class(comp)
+            if not cls: return 0
+            while cls:
+                children = self.objects.resolve(cls, "Children")
+                if not children:
+                    cls = self.objects.obj_class(self.pm.read_u64(cls + 8))
+                    continue
+                child_list_ptr = self.pm.read_u64(children)
+                if not child_list_ptr:
+                    cls = self.objects.obj_class(self.pm.read_u64(cls + 8))
+                    continue
+                child_count = self.pm.read_u32(child_list_ptr + 20)
+                child_array = self.pm.read_u64(child_list_ptr + 8)
+                for i in range(child_count):
+                    child = self.pm.read_u64(child_array + i * 8)
+                    if not child: continue
+                    child_cls = self.objects.obj_class(child)
+                    if not child_cls: continue
+                    child_cls_name = self.objects.class_name(child_cls)
+                    if child_cls_name == "Function":
+                        fname = self.resolve_field_name(child)
+                        if fname and "PaintAtUV" in fname:
+                            return child
+                cls = self.objects.obj_class(self.pm.read_u64(cls + 8))
+            return 0
+        except Exception: return 0
+
+    def _build_paintatuv_params(self, r, g, b):
+        buf = bytearray(72)
+        struct.pack_into("fff", buf, 16, 0.5, 0.5, 0.0)
+        r_lin = max(0.0, min(1.0, r / 255.0))
+        g_lin = max(0.0, min(1.0, g / 255.0))
+        b_lin = max(0.0, min(1.0, b / 255.0))
+        struct.pack_into("ffff", buf, 28, r_lin, g_lin, b_lin, 1.0)
+        return bytes(buf)
+
+    PAINT_SHELLCODE = None
+
+    def _make_shellcode_call(self, vtable_offset=None):
+        import struct
+        if self.PAINT_SHELLCODE is not None: return self.PAINT_SHELLCODE
+        if vtable_offset is None:
+            vtable_offset = getattr(self, "PROCESSEVENT_VTABLE_OFF", 72 * 8)
+        sc = bytes([
+            0x48, 0x83, 0xEC, 0x28,
+            0x48, 0x8B, 0x01,
+            0x48, 0x8B, 0x51, 0x08,
+            0x4C, 0x8B, 0x41, 0x10,
+            0x48, 0x8B, 0x08,
+            0x48, 0xFF, 0xA1,
+        ])
+        sc += struct.pack("<I", vtable_offset)
+        sc += bytes([0x90])
+        self.PAINT_SHELLCODE = bytes(sc)
+        return self.PAINT_SHELLCODE
+
+    def _paint_via_process_event(self, actor, r, g, b, vtable_offset=None, timeout_ms=8000):
+        import ctypes
+        comp = self._find_runtime_paint_component(actor)
+        if not comp: return False
+        paintatuv_func = self._find_paintatuv_function(actor)
+        if not paintatuv_func: return False
+        params_bytes = self._build_paintatuv_params(r, g, b)
+        sc = self._make_shellcode_call(vtable_offset)
+        sc_len, args_len, params_len = len(sc), 24, len(params_bytes)
+        total = sc_len + args_len + params_len
+        alloc = self.pm.allocate(total)
+        if not alloc: return False
+        args_addr, params_addr = alloc + sc_len, alloc + sc_len + args_len
+        try:
+            self.pm.write_bytes(alloc, sc, sc_len)
+            args_block = struct.pack("<QQQ", comp, paintatuv_func, params_addr)
+            self.pm.write_bytes(args_addr, args_block, args_len)
+            self.pm.write_bytes(params_addr, params_bytes, params_len)
+            thread = self.pm.start_thread(alloc, args_addr)
+            if not thread: return False
+            k32 = ctypes.windll.kernel32
+            wait_result = k32.WaitForSingleObject(thread, timeout_ms)
+            proc_exit = ctypes.c_ulong(0)
+            k32.GetExitCodeProcess(self.pm.process_handle, ctypes.byref(proc_exit))
+            k32.CloseHandle(thread)
+            self.pm.free(alloc)
+            if proc_exit.value != 259: return False
+            return wait_result == 0
+        except Exception:
+            try: self.pm.free(alloc)
+            except: pass
+            return False
+
+    def _paint_shellcode_try_indices(self, actor, r, g, b):
+        vtable_offsets = [
+            getattr(self, "PROCESSEVENT_VTABLE_OFF", 72 * 8),
+            73 * 8, 66 * 8, 64 * 8, 65 * 8, 67 * 8,
+        ]
+        for vtoff in vtable_offsets:
+            try:
+                if self._paint_via_process_event(actor, r, g, b, vtable_offset=vtoff, timeout_ms=2000):
+                    return True
+            except Exception:
+                continue
+        return False
+
     def set_camouflage_color(self, actor, r, g, b):
         """Set camouflage color by writing directly to the paint texture.
         Main approach: find RuntimePaintableComponent → find paint texture → write mip0 data.
@@ -1100,11 +1214,20 @@ class MecchaESP:
                 except Exception:
                     del self._camo_cache[actor]
 
+        # -- Method 0: Shellcode injection via ProcessEvent --
+        try:
+            if self._paint_shellcode_try_indices(actor, r, g, b):
+                self._camo_cache[actor] = {"color_addr": None}
+                return True
+        except Exception:
+            pass
+
         # -- Method 1: Paint texture write (matches the mod's approach) --
         try:
             comp = self._find_runtime_paint_component(actor)
             if comp:
                 cls = self.objects.obj_class(comp)
+                tex = None
                 if cls:
                     tex = self._find_texture_on_component(actor)
                 if tex:

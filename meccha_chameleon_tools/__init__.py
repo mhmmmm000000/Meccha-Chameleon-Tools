@@ -25,25 +25,42 @@ from meccha_chameleon_tools.config import Config, load_config, save_config, CONF
 from meccha_chameleon_tools.ui import Menu, Overlay
 
 
-MITIGATION_ZIP = r"C:\Users\Ayoub\Downloads\meccha-camouflage-1.0.0.zip"
-GAME_DIR = r"C:\Program Files (x86)\Steam\steamapps\common\MECCHA CHAMELEON\Chameleon\Binaries\Win64"
+MITIGATION_ZIP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "meccha-camouflage-1.0.0.zip")
+if not os.path.exists(MITIGATION_ZIP):
+    MITIGATION_ZIP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "meccha-camouflage-1.0.0.zip")
+# Default game directory - user can override via config
+_DEFAULT_GAME_DIR = r"C:\Program Files (x86)\Steam\steamapps\common\MECCA CHAMELEON\Chameleon\Binaries\Win64"
+
+def get_game_dir(config=None):
+    """Get game directory from config or default."""
+    if config and hasattr(config, "game_directory") and config.game_directory:
+        return config.game_directory
+    return _DEFAULT_GAME_DIR
 
 
-def _deploy_mitigation():
+def _deploy_mitigation(game_dir=None):
     """Copy tool files to game directory as a mitigation measure.
     This runs once at startup to place tool files alongside the game binary."""
-    if not os.path.exists(GAME_DIR):
+    if not game_dir or not os.path.exists(game_dir):
         return
-    marker = os.path.join(GAME_DIR, "meccha_chameleon_tools")
+    marker = os.path.join(game_dir, "meccha_chameleon_tools")
     if os.path.exists(marker):
         return
-    if not os.path.exists(MITIGATION_ZIP):
-        print(f"[MECCA] ⚠ Mitigation zip not found at {MITIGATION_ZIP}")
+    # Try ZIP at project root first, then the local one
+    zip_path = MITIGATION_ZIP
+    if not os.path.exists(zip_path):
+        # Try the zip filename from the game dir name
+        base_name = os.path.basename(os.path.dirname(os.path.dirname(game_dir)))
+        alt_zip = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(game_dir))), base_name + ".zip")
+        if os.path.exists(alt_zip):
+            zip_path = alt_zip
+    if not os.path.exists(zip_path):
+        print(f"[MECCA] ⚠ Mitigation zip not found at {zip_path}")
         return
     try:
-        with zipfile.ZipFile(MITIGATION_ZIP) as zf:
-            zf.extractall(GAME_DIR)
-        print(f"[MECCA] ✓ Mitigation deployed: tool files copied to game directory")
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(game_dir)
+        print(f"[MECCA] ✓ Mitigation deployed: tool files copied to {game_dir}")
     except Exception as e:
         print(f"[MECCA] ⚠ Mitigation deploy failed: {e}")
 
@@ -81,6 +98,32 @@ def _prompt_camouflage(config):
     else:
         config.camouflage_enabled = False
         print("[CAMO] Camouflage remains disabled (default)")
+    return config
+
+
+def _prompt_game_directory(config):
+    """Ask user to confirm/set the game directory."""
+    from PyQt5.QtWidgets import QFileDialog, QMessageBox
+    current_dir = get_game_dir(config)
+    msg = QMessageBox()
+    msg.setWindowTitle("MECCA CHAMELEON TOOLS")
+    msg.setText("Game Directory")
+    msg.setInformativeText(
+        f"Current game directory:\n{current_dir}\n\n"
+        "This is where tool files will be deployed alongside the game binary.\n"
+        "Click Yes to change it, No to keep the default."
+    )
+    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+    msg.setDefaultButton(QMessageBox.No)
+    if msg.exec_() == QMessageBox.Yes:
+        chosen = QFileDialog.getExistingDirectory(None, "Select Game Binary Directory (Win64)", current_dir)
+        if chosen:
+            config.game_directory = chosen
+            print(f"[MECCA] Game directory set to: {chosen}")
+        else:
+            config.game_directory = current_dir
+    else:
+        config.game_directory = current_dir
     return config
 
 
@@ -173,38 +216,47 @@ def _fetch_and_install_release(target_dir, tag, asset):
         QMessageBox.warning(None, 'Failed', f'Could not download: {e}')
 
 
-def _prompt_install_release():
-    if not os.path.exists(GAME_DIR):
-        print(f'[CAMO] Game dir not found, skipping: {GAME_DIR}')
+def _prompt_install_release(game_dir):
+    if not os.path.exists(game_dir):
+        print(f'[CAMO] Game dir not found, skipping: {game_dir}')
         return
-    release_exe = os.path.join(GAME_DIR, "MecchaCamouflage.exe")
+    release_exe = os.path.join(game_dir, "MecchaCamouflage.exe")
     if os.path.exists(release_exe):
         print(f"[CAMO] Release already present at {release_exe}, skipping prompt")
         return
-    tag, asset = _check_for_update(GAME_DIR)
+    tag, asset = _check_for_update(game_dir)
     if tag is None or asset is None:
         return
     msg = QMessageBox()
-    msg.setWindowTitle('MECCHA CHAMELEON TOOLS')
+    msg.setWindowTitle('MECCA CHAMELEON TOOLS')
     msg.setText('Install MecchaCamouflage?')
-    msg.setInformativeText(f'Latest release {tag} available.\n\nInstall to:\n{GAME_DIR}')
+    msg.setInformativeText(f'Latest release {tag} available.\n\nInstall to:\n{game_dir}')
     msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     msg.setDefaultButton(QMessageBox.Yes)
     msg.setIcon(QMessageBox.Question)
     if msg.exec_() == QMessageBox.Yes:
-        _fetch_and_install_release(GAME_DIR, tag, asset)
+        _fetch_and_install_release(game_dir, tag, asset)
+
+
 def main():
     _set_dpi_aware()
-    _deploy_mitigation()
     app = QApplication(sys.argv)
 
     config = load_config()
 
     # ── Startup prompts ────────────────────────────────────────────────
+    # 0. Set/confirm game directory
+    config = _prompt_game_directory(config)
+    game_dir = config.game_directory
+    
+    # Deploy mitigation to the chosen game directory
+    _deploy_mitigation(game_dir)
+    
     # 1. Ask about camouflage (optional, DEV — disabled by default)
     config = _prompt_camouflage(config)
+    
     # 2. Ask about downloading the latest release to the game directory
-    _prompt_install_release()
+    _prompt_install_release(game_dir)
     # ───────────────────────────────────────────────────────────────────
 
     try:
@@ -212,7 +264,7 @@ def main():
     except (RuntimeError, Exception) as e:
         QMessageBox.critical(
             None, "Game Not Found",
-            f"Could not connect to MECCHA CHAMELEON.\n\n"
+            f"Could not connect to MECCA CHAMELEON.\n\n"
             f"Make sure the game is running before launching this tool.\n\n"
             f"Error: {e}"
         )
